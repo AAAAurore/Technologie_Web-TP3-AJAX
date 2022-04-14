@@ -6,6 +6,9 @@
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
     <link rel="stylesheet" type="text/css" href="css/style.css" />
 
+    <!-- On charge la bibliothèque JQuery -->
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+
     <!-- On charge le moteur de template mustache https://mustache.github.io/ -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mustache.js/2.3.0/mustache.min.js"></script>
 
@@ -15,7 +18,7 @@
             fetch("api/countries")
                 .then(response => response.json())
                 .then(json => showResult(json))
-                .catch(error => showError(error));
+                .catch(error => showError1(error));
         }
 
         // Fonction qui affiche les résultats de la requête
@@ -29,8 +32,106 @@
         }
 
         // Fonction qui traite les erreurs de la requête
-        function showError(error) {
+        function showError1(error) {
             document.getElementById("tableCountries").innerHTML = "Erreur: " + error;
+        }
+
+
+        
+
+        doRequest2();
+        
+        // Fonction qui fait l'appel AJAX
+        function doRequest2() {
+            afficherPays();
+            afficherVilles();
+        }
+
+        function afficherPays(){
+            fetch("api/countries")
+                .then(response => response.json())
+                .then(json => afficherPaysSelect(json))
+                .catch(error => showError1(error));
+        }
+
+        function afficherPaysSelect(resultJson){
+        // Le code source du template est dans la page
+        var template = document.getElementById("countriesSelectTemplate").innerHTML;
+        // On combine le template avec le résultat de la requête
+        var generatedHtml = Mustache.render(template, resultJson._embedded);
+        // On affiche le résultat dans la page
+        document.getElementById("selectCountry").innerHTML = generatedHtml;
+        
+        var option = document.createElement("option");
+        option.value = "0";
+        option.text = "Sélectionner un pays";
+        option.selected = "selected";
+        document.getElementById("selectCountry").add(option);
+        document.getElementById("selectCountry").insertBefore(option, document.getElementById("selectCountry")[0]);
+        }
+
+        function idPays(){
+            return $('#selectCountry option:selected').index();
+        }
+
+        //Afficher la liste des villes
+        function afficherVilles() {
+            if(idPays() == -1 || idPays() == 0){
+                showError2("Veuillez sélectionner un pays.");
+            }
+            else{
+                console.log("http://localhost:8989/api/countries/" + idPays() + "/cities");
+                fetch("api/countries/" + idPays() + "/cities",
+                {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    }
+                })
+                    .then(response => {
+                        // On vérifie le code de retour de la requête
+                        switch (response.status) {
+                            case 200: // OK
+                                // On recharge la liste des villes
+                                chargerlistePaysVilles(idPays());
+                                break;
+                            case 401: // Unauthorized
+                            showError2("Pas d'autorisation.");
+                                break;
+                            case 403: // Forbidden
+                            showError2("Interdit.");
+                                break;
+                            case 404: // Not Found
+                            showError2("Ce pays n'existe pas.");
+                                break;
+                        }
+                    })
+                    .catch(error => showError2(error));
+            
+            }
+        }
+
+        // Un appel AJAX GET pour chercher la liste des villes d'un pays
+        function chargerlistePaysVilles(id) {
+            fetch("api/countries/" + id + "/cities")
+                .then(response => response.json())
+                .then(json => afficheTableCities(json))
+                .catch(error => showError2(error));
+        }
+
+        // Afficher la liste des villes avec un template
+        function afficheTableCities(resultJson) {
+            var template = document.getElementById("citiesTemplate").innerHTML;
+            // On combine le template avec le résultat de la requête
+            var generatedHtml = Mustache.render(template, resultJson._embedded);
+            // On affiche le résultat dans la page
+            document.getElementById("tableCities").innerHTML = generatedHtml;
+        }
+
+        function showError2(error) {
+            //document.getElementById("tableCities").innerHTML = "Erreur: " + error;
+            $("#tableCities").html(error);
         }
     </script>
 </head>
@@ -38,10 +139,38 @@
 <body>
     <h1>Ajax avec l'API fetch et Mustache</h1>
     <button onclick="doRequest()">Exécuter la requête AJAX</button><br>
-
-    <div id="tableCountries">...Le résultat va apparaître ici...</div>
-    <hr>
+    </br>
+    <div id="tableCountries">... Le résultat va apparaître ici...</div>
     <a href='api/countries' target="_blank">Voir les données brutes (JSON)</a><br />
+
+    <!-- Le template Mustache qui sert à formater la liste des pays -->
+    <script id="countriesTemplate" type="text/html">
+        <h2>Liste des pays</h2>
+        <TABLE>
+            <TR>
+                <TH>Code</TH>
+                <TH>Nom</TH>
+            </TR>
+            {{#countries}}
+            <TR>
+                <TD>{{code}}</TD>
+                <TD>{{name}}</TD>
+            </TR>
+            {{/countries}}
+        </TABLE>
+    </script>
+
+    <hr>
+    <div id="countriesSelectTemplate">
+        <h2>Choississez un pays</h2>
+        <select name="selectCountry"  id="selectCountry" onchange="afficherVilles()">
+            {{#countries}}
+                <option value="{{code}}">{{name}}</option>
+            {{/countries}}
+        </select>
+    </div>
+    <div id="tableCities"></br></div>
+    <hr>
     Le HTML est généré par le <a href='https://github.com/samskivert/jmustache' target="_blank">
         moteur de template JMustache
     </a>
@@ -49,16 +178,21 @@
 
     <a href="/">Retour au menu</a>
 
-    <!-- Le template Mustache qui sert à formater la liste des pays -->
-    <script id="countriesTemplate" type="text/html">
-            <h2>Liste des pays</h2>
-            <TABLE>
-            <TR><TH>Code</TH><TH>Nom</TH></TR>
-            {{! Pour chaque pays dans le tableau 'countries' }}
-            {{#countries}}
-            <TR><TD>{{code}}</TD><TD>{{name}}</TD></TR>
-            {{/countries}}
-            </TABLE>
+    <!-- Le template Mustache qui sert à formater la liste des villes du pays choisi -->
+    <script id="citiesTemplate" type="text/html">
+        <h2>Liste des villes du pays choisi</h2>
+        <TABLE>
+            <TR>
+                <TH>Nom</TH>
+                <TH>Population (en millions)</TH>
+            </TR>
+            {{#cities}}
+            <TR>
+                <TD>{{name}}</TD>
+                <TD>{{population}}</TD>
+            </TR>
+            {{/cities}}
+        </TABLE>
     </script>
 </body>
 
